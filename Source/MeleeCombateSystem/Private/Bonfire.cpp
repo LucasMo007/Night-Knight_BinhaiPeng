@@ -60,6 +60,9 @@ void ABonfire::OnTriggerBegin(UPrimitiveComponent* OverlappedComponent, AActor* 
 		// Keep only yaw so the player spawns standing up
 		const FRotator Facing(0.f, RespawnPoint->GetComponentRotation().Yaw, 0.f);
 		GameMode->SetCheckpoint(FTransform(Facing, RespawnPoint->GetComponentLocation()));
+
+		// Resting brings every enemy back
+		GameMode->ResetEnemies();
 	}
 
 	OnRested(Player);
