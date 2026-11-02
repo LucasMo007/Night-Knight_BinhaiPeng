@@ -51,6 +51,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Match")
 	bool IsMatchOver() const { return bMatchOver; }
 
+	// Victory screen "Restart" button: reloads the current level from the start
+	UFUNCTION(BlueprintCallable, Category = "Match")
+	void RestartFromStart();
+
+	// Victory screen "Quit" button
+	UFUNCTION(BlueprintCallable, Category = "Match")
+	void QuitToDesktop();
+
 protected:
 	virtual void BeginPlay() override;
 

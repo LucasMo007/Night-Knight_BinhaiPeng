@@ -7,6 +7,7 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "Kismet/GameplayStatics.h"
 
 AMeleeGameMode::AMeleeGameMode()
 {
@@ -274,6 +275,12 @@ void AMeleeGameMode::EndMatchWithVictory(APlayerController* PC)
 			if (UUserWidget* Widget = CreateWidget<UUserWidget>(PC, VictoryWidgetClass))
 			{
 				Widget->AddToViewport();
+
+				// Show the mouse so the buttons on the victory screen can be clicked
+				FInputModeUIOnly InputMode;
+				InputMode.SetWidgetToFocus(Widget->TakeWidget());
+				PC->SetInputMode(InputMode);
+				PC->bShowMouseCursor = true;
 			}
 		}
 		if (APawn* Player = PC->GetPawn())
@@ -289,4 +296,20 @@ void AMeleeGameMode::OnNotEnoughSouls_Implementation(int32 Current, int32 Needed
 {
 	const FString Message = FString::Printf(TEXT("Need %d souls to enter the church (%d / %d)"), Needed, Current, Needed);
 	UKismetSystemLibrary::PrintString(this, Message, true, false, FLinearColor::Red, 3.f);
+}
+
+void AMeleeGameMode::RestartFromStart()
+{
+	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+	{
+		PC->SetInputMode(FInputModeGameOnly());
+		PC->bShowMouseCursor = false;
+	}
+	const FString LevelName = UGameplayStatics::GetCurrentLevelName(this, true);
+	UGameplayStatics::OpenLevel(this, FName(*LevelName));
+}
+
+void AMeleeGameMode::QuitToDesktop()
+{
+	UKismetSystemLibrary::QuitGame(this, GetWorld()->GetFirstPlayerController(), EQuitPreference::Quit, false);
 }
