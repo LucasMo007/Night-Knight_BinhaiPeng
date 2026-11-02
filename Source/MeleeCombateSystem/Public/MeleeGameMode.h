@@ -37,9 +37,16 @@ public:
 	// The player walked back into the souls they dropped
 	void OnSoulDropCollected(ASoulDrop* Drop);
 
-	// Called by the victory zone; wins only with enough souls
+	// Called by the victory zone; wins only with enough souls (not used since the boss fight)
 	UFUNCTION(BlueprintCallable, Category = "Match")
 	bool TryWin(APawn* Player);
+
+	// Call from the boss's death logic. The game is won once the boss is dead AND the player has SoulsToWin
+	UFUNCTION(BlueprintCallable, Category = "Match")
+	void BossDefeated();
+
+	UFUNCTION(BlueprintPure, Category = "Match")
+	bool IsBossDefeated() const { return bBossDefeated; }
 
 	UFUNCTION(BlueprintPure, Category = "Match")
 	bool IsMatchOver() const { return bMatchOver; }
@@ -50,6 +57,10 @@ protected:
 	// Enemies of this class are recorded at start and respawned by ResetEnemies (set to BP_Skeleton)
 	UPROPERTY(EditDefaultsOnly, Category = "Enemies")
 	TSubclassOf<APawn> EnemyClass;
+
+	// The boss is recorded and respawned the same way, so dying to it gives a fresh fight (set to Boss_BP)
+	UPROPERTY(EditDefaultsOnly, Category = "Enemies")
+	TSubclassOf<APawn> BossClass;
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Checkpoint")
 	FTransform CheckpointTransform;
@@ -75,6 +86,10 @@ protected:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Match")
 	bool bMatchOver = false;
 
+	// A dead boss stays dead: it is not respawned by ResetEnemies any more
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Match")
+	bool bBossDefeated = false;
+
 	// Player reached the goal without enough souls; override in Blueprint for a nicer message
 	UFUNCTION(BlueprintNativeEvent, Category = "Match")
 	void OnNotEnoughSouls(int32 Current, int32 Needed);
@@ -87,6 +102,7 @@ private:
 	struct FEnemySpawnRecord
 	{
 		TSubclassOf<APawn> Class;
+		bool bIsBoss = false;
 		FTransform Transform;
 		TMap<FName, FString> Settings;
 	};
@@ -100,4 +116,13 @@ private:
 	void OnPlayerPawnDestroyed(AActor* DestroyedActor);
 
 	void DestroyEnemy(APawn* Enemy);
+
+	// Every pawn in the world that is an enemy or the boss
+	TArray<APawn*> GatherEnemies() const;
+
+	// Wins if both goals are met: boss dead and enough souls
+	void CheckVictory();
+
+	// Shows the victory screen and freezes the player
+	void EndMatchWithVictory(APlayerController* PC);
 };

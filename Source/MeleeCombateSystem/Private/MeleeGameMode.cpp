@@ -29,17 +29,11 @@ void AMeleeGameMode::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (!EnemyClass)
+	for (APawn* Enemy : GatherEnemies())
 	{
-		return;
-	}
-
-	for (TActorIterator<APawn> It(GetWorld(), EnemyClass); It; ++It)
-	{
-		APawn* Enemy = *It;
-
 		FEnemySpawnRecord Record;
 		Record.Class = Enemy->GetClass();
+		Record.bIsBoss = BossClass && Enemy->IsA(BossClass);
 		Record.Transform = Enemy->GetActorTransform();
 
 		for (TFieldIterator<FProperty> PropIt(Record.Class); PropIt; ++PropIt)
@@ -56,25 +50,47 @@ void AMeleeGameMode::BeginPlay()
 	}
 }
 
+TArray<APawn*> AMeleeGameMode::GatherEnemies() const
+{
+	TArray<APawn*> Enemies;
+	for (const TSubclassOf<APawn>& Class : { EnemyClass, BossClass })
+	{
+		if (!Class)
+		{
+			continue;
+		}
+		for (TActorIterator<APawn> It(GetWorld(), Class); It; ++It)
+		{
+			Enemies.AddUnique(*It);
+		}
+	}
+	return Enemies;
+}
+
 void AMeleeGameMode::ResetEnemies()
 {
-	if (!EnemyClass)
+	if (bMatchOver)
 	{
 		return;
 	}
 
-	TArray<APawn*> Existing;
-	for (TActorIterator<APawn> It(GetWorld(), EnemyClass); It; ++It)
+	for (APawn* Enemy : GatherEnemies())
 	{
-		Existing.Add(*It);
-	}
-	for (APawn* Enemy : Existing)
-	{
+		// Leave the beaten boss's body where it fell
+		if (bBossDefeated && BossClass && Enemy->IsA(BossClass))
+		{
+			continue;
+		}
 		DestroyEnemy(Enemy);
 	}
 
 	for (const FEnemySpawnRecord& Record : EnemyRecords)
 	{
+		if (Record.bIsBoss && bBossDefeated)
+		{
+			continue;
+		}
+
 		APawn* Enemy = GetWorld()->SpawnActorDeferred<APawn>(Record.Class, Record.Transform, nullptr, nullptr,
 			ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
 		if (!Enemy)
@@ -200,6 +216,9 @@ void AMeleeGameMode::OnSoulDropCollected(ASoulDrop* Drop)
 void AMeleeGameMode::AddSouls(int32 Amount)
 {
 	SoulCount = FMath::Max(0, SoulCount + Amount);
+
+	// The boss may already be dead: reaching the soul goal then finishes the game
+	CheckVictory();
 }
 
 bool AMeleeGameMode::TryWin(APawn* Player)
@@ -215,9 +234,40 @@ bool AMeleeGameMode::TryWin(APawn* Player)
 		return false;
 	}
 
+	EndMatchWithVictory(Cast<APlayerController>(Player->GetController()));
+	return true;
+}
+
+void AMeleeGameMode::BossDefeated()
+{
+	if (bMatchOver || bBossDefeated)
+	{
+		return;
+	}
+
+	bBossDefeated = true;
+	CheckVictory();
+
+	if (!bMatchOver)
+	{
+		const FString Message = FString::Printf(TEXT("Boss defeated! Collect %d souls to win (%d / %d)"), SoulsToWin, SoulCount, SoulsToWin);
+		UKismetSystemLibrary::PrintString(this, Message, true, false, FLinearColor::Yellow, 5.f);
+	}
+}
+
+void AMeleeGameMode::CheckVictory()
+{
+	if (!bMatchOver && bBossDefeated && SoulCount >= SoulsToWin)
+	{
+		EndMatchWithVictory(GetWorld()->GetFirstPlayerController());
+	}
+}
+
+void AMeleeGameMode::EndMatchWithVictory(APlayerController* PC)
+{
 	bMatchOver = true;
 
-	if (APlayerController* PC = Cast<APlayerController>(Player->GetController()))
+	if (PC)
 	{
 		if (VictoryWidgetClass)
 		{
@@ -226,11 +276,13 @@ bool AMeleeGameMode::TryWin(APawn* Player)
 				Widget->AddToViewport();
 			}
 		}
-		Player->DisableInput(PC);
+		if (APawn* Player = PC->GetPawn())
+		{
+			Player->DisableInput(PC);
+		}
 	}
 
 	OnVictory();
-	return true;
 }
 
 void AMeleeGameMode::OnNotEnoughSouls_Implementation(int32 Current, int32 Needed)
